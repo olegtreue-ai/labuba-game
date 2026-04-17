@@ -13,27 +13,8 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        @font-face {
-            font-family: 'VK Sans Display';
-            src: url('https://vk.com/fonts/vk_sans_display_regular.woff2') format('woff2');
-            font-weight: 400;
-            font-style: normal;
-        }
-        @font-face {
-            font-family: 'VK Sans Display';
-            src: url('https://vk.com/fonts/vk_sans_display_medium.woff2') format('woff2');
-            font-weight: 500;
-            font-style: normal;
-        }
-        @font-face {
-            font-family: 'VK Sans Display';
-            src: url('https://vk.com/fonts/vk_sans_display_bold.woff2') format('woff2');
-            font-weight: 700;
-            font-style: normal;
-        }
-
         body {
-            font-family: 'VK Sans Display', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, sans-serif;
             transition: background-color 0.2s ease;
             overflow: hidden;
             position: fixed;
@@ -163,7 +144,7 @@
             border-radius: 14px;
             font-size: 16px;
             font-weight: 600;
-            font-family: 'VK Sans Display', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, sans-serif;
             margin: 6px 0;
             width: 100%;
             cursor: pointer;
@@ -336,19 +317,16 @@
 
 <script>
     (function(){
-        // ========== ОБЯЗАТЕЛЬНЫЙ КОД ДЛЯ VK MINI APP ==========
-        // Отправляем сигнал, что приложение загружено
+        // Обязательный сигнал для VK Mini App
         if (window.vkBridge) {
             window.vkBridge.send('VKWebAppInit');
         } else {
-            // Ждём, когда подгрузится VK Bridge
             window.addEventListener('VKWebAppUpdateConfig', function () {
                 if (window.vkBridge) {
                     window.vkBridge.send('VKWebAppInit');
                 }
             });
         }
-        // ========== КОНЕЦ ОБЯЗАТЕЛЬНОГО КОДА ==========
         
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
