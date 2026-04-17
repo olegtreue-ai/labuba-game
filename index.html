@@ -245,7 +245,6 @@
             </div>
             <div class="buttons-panel">
                 <button class="icon-btn" id="pauseBtn">❚❚</button>
-                <button class="icon-btn" id="fullscreenBtn">⛶</button>
             </div>
         </div>
 
@@ -333,7 +332,7 @@
         const ctx = canvas.getContext('2d');
         const gameContainer = document.getElementById('gameContainer');
         
-        // Фиксированный размер канваса для стабильности
+        // Фиксированный размер канваса
         const CANVAS_W = 450;
         const CANVAS_H = 700;
         canvas.width = CANVAS_W;
@@ -412,7 +411,6 @@
         const resetGamePause = document.getElementById('resetGamePause');
         const helpButton = document.getElementById('helpButton');
         const helpCloseBtn = document.getElementById('helpCloseBtn');
-        const fullscreenBtn = document.getElementById('fullscreenBtn');
         
         bestDisplaySpan.innerText = bestScore;
         
@@ -434,16 +432,6 @@
         }
         function toggleTheme() { isDarkTheme = !isDarkTheme; applyTheme(); }
         themeTogglePause.addEventListener('click', toggleTheme);
-        
-        // Полноэкранный режим
-        fullscreenBtn.addEventListener('click', () => {
-            const elem = gameContainer;
-            if (!document.fullscreenElement) {
-                elem.requestFullscreen().catch(err => console.warn(err));
-            } else {
-                document.exitFullscreen();
-            }
-        });
         
         function recalculateMultipliers() {
             currentSpeedMultiplier = 1.0 + (speedStacks * SPEED_STACK_MULTIPLIER);
@@ -680,18 +668,15 @@
                 
                 item.y += item.speed;
                 
+                // Проверка коллизии
                 const collides = (item.x < labubaX + LABUBA_SIZE &&
                                    item.x + item.w > labubaX &&
                                    item.y < labubaY + LABUBA_SIZE &&
                                    item.y + item.h > labubaY);
                 
                 if(collides) {
-                    if(frozenActive) {
-                        const direction = (item.x + item.w/2) - (labubaX + LABUBA_SIZE/2);
-                        item.vx = Math.sign(direction) * 4;
-                        item.y = labubaY - item.h - 2;
-                        continue;
-                    } else {
+                    // Важно: сначала обрабатываем эффекты, потом удаляем предмет
+                    if(!frozenActive) {
                         if(item.isSausage) addSpeedStack();
                         if(item.isPoop) {
                             addSlowStack();
@@ -717,10 +702,17 @@
                         score += item.points;
                         if(score < 0) score = 0;
                         updateUI();
-                        items.splice(i,1);
-                        i--;
-                        continue;
+                    } else {
+                        // Заморозка: отскок
+                        const direction = (item.x + item.w/2) - (labubaX + LABUBA_SIZE/2);
+                        item.vx = Math.sign(direction) * 4;
+                        item.y = labubaY - item.h - 2;
+                        continue; // Не удаляем предмет, просто отталкиваем
                     }
+                    // Удаляем предмет
+                    items.splice(i,1);
+                    i--;
+                    continue;
                 }
                 
                 if(item.y + item.h > GROUND_Y + 50 || item.x + item.w < 0 || item.x > CANVAS_W) {
@@ -793,16 +785,6 @@
             for(let i=0;i<2;i++) spawnItem();
         }
         resetGamePause.addEventListener('click', resetGame);
-        
-        function handleCanvasResize() {
-            const containerRect = gameContainer.getBoundingClientRect();
-            const maxHeight = window.innerHeight * 0.92;
-            const scale = Math.min(containerRect.width / CANVAS_W, maxHeight / CANVAS_H);
-            canvas.style.width = `${CANVAS_W * scale}px`;
-            canvas.style.height = `${CANVAS_H * scale}px`;
-        }
-        window.addEventListener('resize', handleCanvasResize);
-        handleCanvasResize();
         
         let labubaNormal = null;
         let labubaPoop = null;
