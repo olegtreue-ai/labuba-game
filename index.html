@@ -317,6 +317,23 @@
 
 <script>
     (function(){
+        // ========== VK GAMES ОБЯЗАТЕЛЬНЫЕ СИГНАЛЫ ==========
+        function vkGameReady() {
+            if (window.vkBridge) {
+                vkBridge.send("VKWebAppInit");
+                vkBridge.send("VKWebAppGameStart");
+            } else {
+                document.addEventListener("VKWebAppUpdateConfig", function () {
+                    if (window.vkBridge) {
+                        vkBridge.send("VKWebAppInit");
+                        vkBridge.send("VKWebAppGameStart");
+                    }
+                });
+            }
+        }
+        vkGameReady();
+        // ========== КОНЕЦ ОБЯЗАТЕЛЬНЫХ СИГНАЛОВ ==========
+        
         // Ждём полной загрузки страницы
         window.addEventListener('load', function() {
             // Загружаем изображения
