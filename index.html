@@ -354,9 +354,10 @@
         canvas.width = CANVAS_W;
         canvas.height = CANVAS_H;
         
+        // ОСТРОВОК В САМОМ НИЗУ
         const GROUND_Y = CANVAS_H - 28;
-        const LABUBA_WIDTH = 90;
-        const LABUBA_HEIGHT = 90;
+        const LABUBA_WIDTH = 58;
+        const LABUBA_HEIGHT = 58;
         const ITEM_SIZE = 30;
         
         let labubaX = CANVAS_W/2 - LABUBA_WIDTH/2;
@@ -839,11 +840,9 @@
             return labubaNormal;
         }
         
-        // ИСПРАВЛЕННАЯ ФУНКЦИЯ ОТРИСОВКИ — без чёрного фона
         function drawLabuba(x, y, w, h) {
             const currentImg = getCurrentLabubaImage();
             
-            // Рисуем изображение если оно загружено
             if (currentImg && currentImg.complete && currentImg.naturalWidth > 0) {
                 ctx.drawImage(currentImg, x, y, w, h);
                 if(flyActive && !frozenActive) {
@@ -854,7 +853,6 @@
                 return;
             }
             
-            // Fallback (если картинка не загрузилась)
             ctx.save();
             if (frozenActive) {
                 ctx.fillStyle = "#4A90D9";
