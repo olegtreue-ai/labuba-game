@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Лабуба ловит вкусняшки</title>
     <style>
         * {
@@ -316,46 +316,42 @@
 </div>
 
 <script>
-    // Ждём полной загрузки страницы и всех изображений
-    window.addEventListener('load', function() {
-        // Загружаем изображения
-        const labubaNormal = new Image();
-        const labubaPoop = new Image();
-        const labubaFrozen = new Image();
-        
-        let imagesLoaded = 0;
-        
-        function startGame() {
-            // Передаём изображения в глобальные переменные
-            window.labubaNormal = labubaNormal;
-            window.labubaPoop = labubaPoop;
-            window.labubaFrozen = labubaFrozen;
+    (function(){
+        // Ждём полной загрузки страницы
+        window.addEventListener('load', function() {
+            // Загружаем изображения
+            const labubaNormal = new Image();
+            const labubaPoop = new Image();
+            const labubaFrozen = new Image();
             
-            // Запускаем игру
-            initGame();
-        }
-        
-        labubaNormal.onload = function() { imagesLoaded++; if (imagesLoaded === 3) startGame(); };
-        labubaPoop.onload = function() { imagesLoaded++; if (imagesLoaded === 3) startGame(); };
-        labubaFrozen.onload = function() { imagesLoaded++; if (imagesLoaded === 3) startGame(); };
-        
-        labubaNormal.src = "labuba_normal.png";
-        labubaPoop.src = "labuba_poop.png";
-        labubaFrozen.src = "labuba_frozen.png";
-        
-        // Таймаут на случай, если картинки не загрузятся
-        setTimeout(function() {
-            if (imagesLoaded < 3) {
+            let imagesLoaded = 0;
+            
+            function startGame() {
                 window.labubaNormal = labubaNormal;
                 window.labubaPoop = labubaPoop;
                 window.labubaFrozen = labubaFrozen;
                 initGame();
             }
-        }, 3000);
-    });
-    
-    function initGame() {
-        (function(){
+            
+            labubaNormal.onload = function() { imagesLoaded++; if (imagesLoaded === 3) startGame(); };
+            labubaPoop.onload = function() { imagesLoaded++; if (imagesLoaded === 3) startGame(); };
+            labubaFrozen.onload = function() { imagesLoaded++; if (imagesLoaded === 3) startGame(); };
+            
+            labubaNormal.src = "labuba_normal.png";
+            labubaPoop.src = "labuba_poop.png";
+            labubaFrozen.src = "labuba_frozen.png";
+            
+            setTimeout(function() {
+                if (imagesLoaded < 3) {
+                    window.labubaNormal = labubaNormal;
+                    window.labubaPoop = labubaPoop;
+                    window.labubaFrozen = labubaFrozen;
+                    initGame();
+                }
+            }, 3000);
+        });
+        
+        function initGame() {
             const canvas = document.getElementById('gameCanvas');
             const ctx = canvas.getContext('2d');
             const gameContainer = document.getElementById('gameContainer');
@@ -1100,8 +1096,8 @@
             
             canvas.addEventListener('touchstart', (e) => { e.preventDefault(); }, {passive: false});
             canvas.addEventListener('touchmove', (e) => { e.preventDefault(); }, {passive: false});
-        })();
-    }
+        }
+    })();
 </script>
 </body>
 </html>
