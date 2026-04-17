@@ -2,9 +2,11 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Лабуба ловит вкусняшки</title>
+    <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
     <style>
+        /* ВЕСЬ ТВОЙ СУЩЕСТВУЮЩИЙ СТИЛЬ — НИЧЕГО НЕ МЕНЯЮ */
         * {
             margin: 0;
             padding: 0;
@@ -315,805 +317,781 @@
     </div>
 </div>
 
+<script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
 <script>
     (function(){
-        // ========== VK GAMES ОБЯЗАТЕЛЬНЫЕ СИГНАЛЫ ==========
-        function vkGameReady() {
-            if (window.vkBridge) {
-                vkBridge.send("VKWebAppInit");
-                vkBridge.send("VKWebAppGameStart");
+        // Инициализация VK Bridge (обязательно для VK Games!)
+        if (window.vkBridge) {
+            vkBridge.send("VKWebAppInit");
+            vkBridge.send("VKWebAppGameStart");
+        } else {
+            document.addEventListener("VKWebAppUpdateConfig", function () {
+                if (window.vkBridge) {
+                    vkBridge.send("VKWebAppInit");
+                    vkBridge.send("VKWebAppGameStart");
+                }
+            });
+        }
+        
+        // ВЕСЬ ТВОЙ СУЩЕСТВУЮЩИЙ JS КОД ИГРЫ — НИЧЕГО НЕ МЕНЯЮ
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const gameContainer = document.getElementById('gameContainer');
+        const statsPanel = document.getElementById('statsPanel');
+        const timerBadge = document.getElementById('timerBadge');
+        const slowTimerBadge = document.getElementById('slowTimerBadge');
+        const frozenTimerBadge = document.getElementById('frozenTimerBadge');
+        const flyTimerBadge = document.getElementById('flyTimerBadge');
+        const speedTimerSpan = document.getElementById('speedTimer');
+        const slowTimerSpan = document.getElementById('slowTimer');
+        const frozenTimerSpan = document.getElementById('frozenTimer');
+        const flyTimerSpan = document.getElementById('flyTimer');
+        
+        const CANVAS_W = 450;
+        const CANVAS_H = 700;
+        canvas.width = CANVAS_W;
+        canvas.height = CANVAS_H;
+        
+        const GROUND_Y = CANVAS_H - 28;
+        const LABUBA_WIDTH = 90;
+        const LABUBA_HEIGHT = 90;
+        const ITEM_SIZE = 30;
+        
+        let labubaX = CANVAS_W/2 - LABUBA_WIDTH/2;
+        let labubaY = GROUND_Y - LABUBA_HEIGHT + 4;
+        
+        let items = [];
+        let score = 0;
+        let bestScore = 0;
+        let gameActive = true;
+        let lastTimestamp = 0;
+        
+        let speedStacks = 0;
+        let slowStacks = 0;
+        let frozenActive = false;
+        let frozenRemaining = 0;
+        let flyActive = false;
+        let flyRemaining = 0;
+        
+        let speedBoostRemaining = 0;
+        let slowDebuffRemaining = 0;
+        
+        const SPEED_STACK_MULTIPLIER = 0.35;
+        const SLOW_STACK_FACTOR = 0.55;
+        
+        let currentSpeedMultiplier = 1.0;
+        
+        const BASE_FRUIT_SPEED = 1.5;
+        const BASE_EFFECT_SPEED = 2.2;
+        
+        let lastSpawnFrame = 0;
+        let frameCounter = 0;
+        let baseSpawnRate = 65;
+        
+        const itemTypes = [
+            { emoji: '🍬', points: 1, baseSpeed: BASE_FRUIT_SPEED, weight: 24, isEffect: false },
+            { emoji: '🍩', points: 1, baseSpeed: BASE_FRUIT_SPEED, weight: 18, isEffect: false },
+            { emoji: '🍓', points: 1, baseSpeed: BASE_FRUIT_SPEED, weight: 18, isEffect: false },
+            { emoji: '💊', points: 2, baseSpeed: BASE_EFFECT_SPEED, weight: 6, isEffect: true },
+            { emoji: '🌭', points: 1, baseSpeed: BASE_EFFECT_SPEED, weight: 5, isEffect: true },
+            { emoji: '💩', points: -2, baseSpeed: BASE_EFFECT_SPEED, weight: 8, isEffect: true },
+            { emoji: '🧊', points: 0, baseSpeed: BASE_EFFECT_SPEED + 0.5, weight: 3, isEffect: true },
+            { emoji: '🚀', points: 0, baseSpeed: BASE_EFFECT_SPEED, weight: 3, isEffect: true }
+        ];
+        
+        function getRandomItemType() {
+            let totalWeight = 0;
+            for(let t of itemTypes) totalWeight += t.weight;
+            let rand = Math.random() * totalWeight;
+            let accum = 0;
+            for(let t of itemTypes) {
+                accum += t.weight;
+                if(rand <= accum) return t;
+            }
+            return itemTypes[0];
+        }
+        
+        try {
+            const saved = localStorage.getItem('labubaBest');
+            if(saved && !isNaN(parseInt(saved))) bestScore = parseInt(saved);
+        } catch(e) {}
+        
+        const scoreDisplaySpan = document.getElementById('scoreDisplay');
+        const bestDisplaySpan = document.getElementById('bestDisplay');
+        const pauseMenuDiv = document.getElementById('pauseMenu');
+        const helpMenuDiv = document.getElementById('helpMenu');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const resumeGameBtn = document.getElementById('resumeGameBtn');
+        const themeTogglePause = document.getElementById('themeTogglePause');
+        const resetGamePause = document.getElementById('resetGamePause');
+        const helpButton = document.getElementById('helpButton');
+        const helpCloseBtn = document.getElementById('helpCloseBtn');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        
+        bestDisplaySpan.innerText = bestScore;
+        
+        helpButton.addEventListener('click', () => { helpMenuDiv.style.display = 'flex'; });
+        helpCloseBtn.addEventListener('click', () => { helpMenuDiv.style.display = 'none'; });
+        
+        let isDarkTheme = false;
+        function applyTheme() {
+            const body = document.body;
+            if(isDarkTheme) {
+                body.classList.remove('light-theme');
+                body.classList.add('dark-theme');
+                themeTogglePause.innerHTML = '☀ Светлая тема';
             } else {
-                document.addEventListener("VKWebAppUpdateConfig", function () {
-                    if (window.vkBridge) {
-                        vkBridge.send("VKWebAppInit");
-                        vkBridge.send("VKWebAppGameStart");
-                    }
-                });
+                body.classList.remove('dark-theme');
+                body.classList.add('light-theme');
+                themeTogglePause.innerHTML = '☾ Тёмная тема';
             }
         }
-        vkGameReady();
-        // ========== КОНЕЦ ОБЯЗАТЕЛЬНЫХ СИГНАЛОВ ==========
+        function toggleTheme() { isDarkTheme = !isDarkTheme; applyTheme(); }
+        themeTogglePause.addEventListener('click', toggleTheme);
         
-        // Ждём полной загрузки страницы
-        window.addEventListener('load', function() {
-            // Загружаем изображения
-            const labubaNormal = new Image();
-            const labubaPoop = new Image();
-            const labubaFrozen = new Image();
+        function recalculateMultipliers() {
+            currentSpeedMultiplier = 1.0 + (speedStacks * SPEED_STACK_MULTIPLIER);
             
-            let imagesLoaded = 0;
-            
-            function startGame() {
-                window.labubaNormal = labubaNormal;
-                window.labubaPoop = labubaPoop;
-                window.labubaFrozen = labubaFrozen;
-                initGame();
+            if(speedStacks > 0) {
+                statsPanel.classList.add('speed-mode');
+                timerBadge.style.display = 'flex';
+                speedTimerSpan.innerText = Math.ceil(speedBoostRemaining);
+            } else {
+                statsPanel.classList.remove('speed-mode');
+                timerBadge.style.display = 'none';
             }
             
-            labubaNormal.onload = function() { imagesLoaded++; if (imagesLoaded === 3) startGame(); };
-            labubaPoop.onload = function() { imagesLoaded++; if (imagesLoaded === 3) startGame(); };
-            labubaFrozen.onload = function() { imagesLoaded++; if (imagesLoaded === 3) startGame(); };
+            if(slowStacks > 0) {
+                statsPanel.classList.add('slow-mode');
+                slowTimerBadge.style.display = 'flex';
+                slowTimerSpan.innerText = Math.ceil(slowDebuffRemaining);
+            } else {
+                statsPanel.classList.remove('slow-mode');
+                slowTimerBadge.style.display = 'none';
+            }
             
+            if(frozenActive) {
+                statsPanel.classList.add('frozen-mode');
+                frozenTimerBadge.style.display = 'flex';
+                frozenTimerSpan.innerText = Math.ceil(frozenRemaining);
+            } else {
+                statsPanel.classList.remove('frozen-mode');
+                frozenTimerBadge.style.display = 'none';
+            }
+            
+            if(flyActive) {
+                statsPanel.classList.add('fly-mode');
+                flyTimerBadge.style.display = 'flex';
+                flyTimerSpan.innerText = Math.ceil(flyRemaining);
+            } else {
+                statsPanel.classList.remove('fly-mode');
+                flyTimerBadge.style.display = 'none';
+            }
+        }
+        
+        function addSpeedStack() {
+            speedStacks++;
+            speedBoostRemaining += 60;
+            recalculateMultipliers();
+        }
+        
+        function addSlowStack() {
+            slowStacks++;
+            slowDebuffRemaining += 60;
+            recalculateMultipliers();
+        }
+        
+        function removeOneSlowStack() {
+            if(slowStacks > 0) {
+                slowStacks--;
+                if(slowStacks === 0) slowDebuffRemaining = 0;
+                else slowDebuffRemaining = slowDebuffRemaining * (slowStacks / (slowStacks + 1));
+                recalculateMultipliers();
+                return true;
+            }
+            return false;
+        }
+        
+        function activateFreeze() {
+            frozenActive = true;
+            frozenRemaining = 20;
+            recalculateMultipliers();
+        }
+        
+        function activateFly() {
+            flyActive = true;
+            flyRemaining += 25;
+            recalculateMultipliers();
+        }
+        
+        function updateTimers(now) {
+            if(lastTimestamp === 0) { lastTimestamp = now; return; }
+            const delta = Math.min(0.1, (now - lastTimestamp) / 1000);
+            if(delta <= 0) return;
+            
+            if(speedStacks > 0) {
+                speedBoostRemaining -= delta;
+                if(speedBoostRemaining <= 0) {
+                    speedStacks = 0;
+                    speedBoostRemaining = 0;
+                    recalculateMultipliers();
+                } else speedTimerSpan.innerText = Math.ceil(speedBoostRemaining);
+            }
+            
+            if(slowStacks > 0) {
+                slowDebuffRemaining -= delta;
+                if(slowDebuffRemaining <= 0) {
+                    slowStacks = 0;
+                    slowDebuffRemaining = 0;
+                    recalculateMultipliers();
+                } else slowTimerSpan.innerText = Math.ceil(slowDebuffRemaining);
+            }
+            
+            if(frozenActive) {
+                frozenRemaining -= delta;
+                if(frozenRemaining <= 0) {
+                    frozenActive = false;
+                    frozenRemaining = 0;
+                    recalculateMultipliers();
+                } else frozenTimerSpan.innerText = Math.ceil(frozenRemaining);
+            }
+            
+            if(flyActive) {
+                flyRemaining -= delta;
+                if(flyRemaining <= 0) {
+                    flyActive = false;
+                    flyRemaining = 0;
+                    recalculateMultipliers();
+                } else {
+                    flyTimerSpan.innerText = Math.ceil(flyRemaining);
+                }
+            }
+            
+            lastTimestamp = now;
+        }
+        
+        let pointerActive = false;
+        let targetLabubaX = labubaX;
+        let targetLabubaY = labubaY;
+        
+        function handleMove(clientX, clientY) {
+            if(!gameActive) return;
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            let canvasX = (clientX - rect.left) * scaleX;
+            let canvasY = (clientY - rect.top) * scaleY;
+            
+            canvasX = Math.min(Math.max(canvasX, 5), CANVAS_W - LABUBA_WIDTH - 5);
+            
+            if(flyActive && !frozenActive) {
+                canvasY = Math.min(Math.max(canvasY, 5), CANVAS_H - LABUBA_HEIGHT - 5);
+                targetLabubaY = canvasY;
+            } else {
+                targetLabubaY = GROUND_Y - LABUBA_HEIGHT + 4;
+            }
+            targetLabubaX = canvasX;
+        }
+        
+        function onPointerMove(e) {
+            if(!pointerActive) return;
+            e.preventDefault();
+            const clientX = e.clientX ?? (e.touches ? e.touches[0].clientX : null);
+            const clientY = e.clientY ?? (e.touches ? e.touches[0].clientY : null);
+            if(clientX !== undefined && clientY !== undefined) handleMove(clientX, clientY);
+        }
+        
+        function onPointerStart(e) {
+            e.preventDefault();
+            pointerActive = true;
+            const clientX = e.clientX ?? (e.touches ? e.touches[0].clientX : null);
+            const clientY = e.clientY ?? (e.touches ? e.touches[0].clientY : null);
+            if(clientX !== undefined && clientY !== undefined) handleMove(clientX, clientY);
+        }
+        
+        function onPointerEnd(e) { pointerActive = false; }
+        
+        canvas.addEventListener('mousemove', onPointerMove);
+        canvas.addEventListener('mousedown', onPointerStart);
+        window.addEventListener('mouseup', onPointerEnd);
+        canvas.addEventListener('touchmove', onPointerMove, {passive: false});
+        canvas.addEventListener('touchstart', onPointerStart, {passive: false});
+        canvas.addEventListener('touchend', onPointerEnd);
+        canvas.addEventListener('mouseleave', () => { pointerActive = false; });
+        
+        function updateLabubaPosition() {
+            if(!gameActive) return;
+            if(frozenActive) return;
+            
+            const diffX = targetLabubaX - labubaX;
+            const diffY = targetLabubaY - labubaY;
+            
+            let speedMultiplier = 1.0;
+            if(!flyActive) {
+                speedMultiplier = Math.pow(SLOW_STACK_FACTOR, slowStacks);
+                if(slowStacks === 0) speedMultiplier = 1.0;
+                if(speedMultiplier < 0.05) speedMultiplier = 0.05;
+            } else {
+                speedMultiplier = 0.25;
+            }
+            
+            let stepX = diffX * 0.22 * speedMultiplier;
+            if(Math.abs(stepX) < 0.5 && Math.abs(diffX) > 0) stepX = Math.sign(diffX) * 0.5 * speedMultiplier;
+            labubaX += stepX;
+            labubaX = Math.min(Math.max(labubaX, 5), CANVAS_W - LABUBA_WIDTH - 5);
+            
+            if(flyActive && !frozenActive) {
+                let stepY = diffY * 0.22;
+                if(Math.abs(stepY) < 0.5 && Math.abs(diffY) > 0) stepY = Math.sign(diffY) * 0.5;
+                labubaY += stepY;
+                labubaY = Math.min(Math.max(labubaY, 5), CANVAS_H - LABUBA_HEIGHT - 5);
+            } else {
+                labubaY = GROUND_Y - LABUBA_HEIGHT + 4;
+            }
+        }
+        
+        function spawnItem() {
+            if(!gameActive) return;
+            const randX = 15 + Math.random() * (CANVAS_W - ITEM_SIZE - 15);
+            const typeObj = getRandomItemType();
+            
+            let speed = typeObj.baseSpeed;
+            speed = speed * currentSpeedMultiplier;
+            speed += (Math.random() * 0.5 - 0.25);
+            
+            items.push({
+                x: randX,
+                y: -ITEM_SIZE,
+                w: ITEM_SIZE,
+                h: ITEM_SIZE,
+                type: typeObj.emoji,
+                points: typeObj.points,
+                speed: speed,
+                vx: 0,
+                isSausage: typeObj.emoji === '🌭',
+                isPoop: typeObj.emoji === '💩',
+                isPill: typeObj.emoji === '💊',
+                isIce: typeObj.emoji === '🧊',
+                isRocket: typeObj.emoji === '🚀'
+            });
+        }
+        
+        function updateItems() {
+            for(let i=0; i<items.length; i++) {
+                const item = items[i];
+                
+                if(item.vx !== 0) {
+                    item.x += item.vx;
+                    item.vx *= 0.98;
+                    if(Math.abs(item.vx) < 0.1) item.vx = 0;
+                }
+                
+                item.y += item.speed;
+                
+                const collides = (item.x < labubaX + LABUBA_WIDTH &&
+                                   item.x + item.w > labubaX &&
+                                   item.y < labubaY + LABUBA_HEIGHT &&
+                                   item.y + item.h > labubaY);
+                
+                if(collides) {
+                    if(frozenActive) {
+                        const direction = (item.x + item.w/2) - (labubaX + LABUBA_WIDTH/2);
+                        item.vx = Math.sign(direction) * 3.5;
+                        item.y = labubaY - item.h - 2;
+                        continue;
+                    } else {
+                        if(item.isSausage) addSpeedStack();
+                        if(item.isPoop) {
+                            addSlowStack();
+                            if(flyActive) {
+                                flyActive = false;
+                                flyRemaining = 0;
+                                labubaY = GROUND_Y - LABUBA_HEIGHT + 4;
+                                recalculateMultipliers();
+                            }
+                        }
+                        if(item.isPill) removeOneSlowStack();
+                        if(item.isIce) {
+                            activateFreeze();
+                            if(flyActive) {
+                                flyActive = false;
+                                flyRemaining = 0;
+                                labubaY = GROUND_Y - LABUBA_HEIGHT + 4;
+                                recalculateMultipliers();
+                            }
+                        }
+                        if(item.isRocket) activateFly();
+                        
+                        score += item.points;
+                        if(score < 0) score = 0;
+                        updateUI();
+                        items.splice(i,1);
+                        i--;
+                        continue;
+                    }
+                }
+                
+                if(item.y + item.h > GROUND_Y + 35 || item.x + item.w < 0 || item.x > CANVAS_W) {
+                    items.splice(i,1);
+                    i--;
+                }
+            }
+        }
+        
+        function handleSpawning() {
+            if(!gameActive) return;
+            frameCounter++;
+            let currentRate = baseSpawnRate;
+            if(speedStacks > 0) currentRate = Math.max(38, baseSpawnRate - 10);
+            
+            if(frameCounter - lastSpawnFrame >= currentRate) {
+                lastSpawnFrame = frameCounter;
+                spawnItem();
+                if(Math.random() < 0.05 && gameActive) spawnItem();
+            }
+        }
+        
+        function updateUI() {
+            scoreDisplaySpan.innerText = score;
+            if(score > bestScore) {
+                bestScore = score;
+                bestDisplaySpan.innerText = bestScore;
+                try {
+                    localStorage.setItem('labubaBest', bestScore);
+                } catch(e) {}
+            }
+        }
+        
+        function setPause(active) {
+            if(active) { gameActive = false; pauseMenuDiv.style.display = 'flex'; }
+            else { gameActive = true; pauseMenuDiv.style.display = 'none'; }
+        }
+        function resumeGame() { setPause(false); }
+        pauseBtn.addEventListener('click', () => { if(gameActive) setPause(true); });
+        resumeGameBtn.addEventListener('click', resumeGame);
+        
+        function resetGame() {
+            gameActive = true;
+            score = 0;
+            items = [];
+            labubaX = CANVAS_W/2 - LABUBA_WIDTH/2;
+            labubaY = GROUND_Y - LABUBA_HEIGHT + 4;
+            targetLabubaX = labubaX;
+            targetLabubaY = labubaY;
+            frameCounter = 0;
+            lastSpawnFrame = 0;
+            
+            speedStacks = 0;
+            slowStacks = 0;
+            frozenActive = false;
+            frozenRemaining = 0;
+            flyActive = false;
+            flyRemaining = 0;
+            speedBoostRemaining = 0;
+            slowDebuffRemaining = 0;
+            currentSpeedMultiplier = 1.0;
+            
+            statsPanel.classList.remove('speed-mode', 'slow-mode', 'frozen-mode', 'fly-mode');
+            timerBadge.style.display = 'none';
+            slowTimerBadge.style.display = 'none';
+            frozenTimerBadge.style.display = 'none';
+            flyTimerBadge.style.display = 'none';
+            updateUI();
+            if(pauseMenuDiv.style.display === 'flex') setPause(false);
+            for(let i=0;i<2;i++) spawnItem();
+        }
+        resetGamePause.addEventListener('click', resetGame);
+        
+        function toggleFullscreen() {
+            const elem = gameContainer;
+            if (!document.fullscreenElement) elem.requestFullscreen().catch(err => {});
+            else document.exitFullscreen();
+        }
+        fullscreenBtn.addEventListener('click', toggleFullscreen);
+        
+        function handleCanvasResize() {
+            const containerRect = gameContainer.getBoundingClientRect();
+            const maxHeight = window.innerHeight * 0.92;
+            const scale = Math.min(containerRect.width / CANVAS_W, maxHeight / CANVAS_H);
+            canvas.style.width = `${CANVAS_W * scale}px`;
+            canvas.style.height = `${CANVAS_H * scale}px`;
+        }
+        window.addEventListener('resize', handleCanvasResize);
+        handleCanvasResize();
+        
+        let labubaNormal = null;
+        let labubaPoop = null;
+        let labubaFrozen = null;
+        
+        function loadLabubaImages() {
+            labubaNormal = new Image();
+            labubaPoop = new Image();
+            labubaFrozen = new Image();
             labubaNormal.src = "labuba_normal.png";
             labubaPoop.src = "labuba_poop.png";
             labubaFrozen.src = "labuba_frozen.png";
-            
-            setTimeout(function() {
-                if (imagesLoaded < 3) {
-                    window.labubaNormal = labubaNormal;
-                    window.labubaPoop = labubaPoop;
-                    window.labubaFrozen = labubaFrozen;
-                    initGame();
-                }
-            }, 3000);
-        });
+        }
+        loadLabubaImages();
         
-        function initGame() {
-            const canvas = document.getElementById('gameCanvas');
-            const ctx = canvas.getContext('2d');
-            const gameContainer = document.getElementById('gameContainer');
-            const statsPanel = document.getElementById('statsPanel');
-            const timerBadge = document.getElementById('timerBadge');
-            const slowTimerBadge = document.getElementById('slowTimerBadge');
-            const frozenTimerBadge = document.getElementById('frozenTimerBadge');
-            const flyTimerBadge = document.getElementById('flyTimerBadge');
-            const speedTimerSpan = document.getElementById('speedTimer');
-            const slowTimerSpan = document.getElementById('slowTimer');
-            const frozenTimerSpan = document.getElementById('frozenTimer');
-            const flyTimerSpan = document.getElementById('flyTimer');
+        function getCurrentLabubaImage() {
+            if (frozenActive) return labubaFrozen;
+            if (slowStacks > 0) return labubaPoop;
+            return labubaNormal;
+        }
+        
+        function drawLabuba(x, y, w, h) {
+            const currentImg = getCurrentLabubaImage();
             
-            const CANVAS_W = 450;
-            const CANVAS_H = 700;
-            canvas.width = CANVAS_W;
-            canvas.height = CANVAS_H;
-            
-            const GROUND_Y = CANVAS_H - 28;
-            const LABUBA_WIDTH = 90;
-            const LABUBA_HEIGHT = 90;
-            const ITEM_SIZE = 30;
-            
-            let labubaX = CANVAS_W/2 - LABUBA_WIDTH/2;
-            let labubaY = GROUND_Y - LABUBA_HEIGHT + 4;
-            
-            let items = [];
-            let score = 0;
-            let bestScore = 0;
-            let gameActive = true;
-            let lastTimestamp = 0;
-            
-            let speedStacks = 0;
-            let slowStacks = 0;
-            let frozenActive = false;
-            let frozenRemaining = 0;
-            let flyActive = false;
-            let flyRemaining = 0;
-            
-            let speedBoostRemaining = 0;
-            let slowDebuffRemaining = 0;
-            
-            const SPEED_STACK_MULTIPLIER = 0.35;
-            const SLOW_STACK_FACTOR = 0.55;
-            
-            let currentSpeedMultiplier = 1.0;
-            
-            const BASE_FRUIT_SPEED = 1.5;
-            const BASE_EFFECT_SPEED = 2.2;
-            
-            let lastSpawnFrame = 0;
-            let frameCounter = 0;
-            let baseSpawnRate = 65;
-            
-            const itemTypes = [
-                { emoji: '🍬', points: 1, baseSpeed: BASE_FRUIT_SPEED, weight: 24, isEffect: false },
-                { emoji: '🍩', points: 1, baseSpeed: BASE_FRUIT_SPEED, weight: 18, isEffect: false },
-                { emoji: '🍓', points: 1, baseSpeed: BASE_FRUIT_SPEED, weight: 18, isEffect: false },
-                { emoji: '💊', points: 2, baseSpeed: BASE_EFFECT_SPEED, weight: 6, isEffect: true },
-                { emoji: '🌭', points: 1, baseSpeed: BASE_EFFECT_SPEED, weight: 5, isEffect: true },
-                { emoji: '💩', points: -2, baseSpeed: BASE_EFFECT_SPEED, weight: 8, isEffect: true },
-                { emoji: '🧊', points: 0, baseSpeed: BASE_EFFECT_SPEED + 0.5, weight: 3, isEffect: true },
-                { emoji: '🚀', points: 0, baseSpeed: BASE_EFFECT_SPEED, weight: 3, isEffect: true }
-            ];
-            
-            function getRandomItemType() {
-                let totalWeight = 0;
-                for(let t of itemTypes) totalWeight += t.weight;
-                let rand = Math.random() * totalWeight;
-                let accum = 0;
-                for(let t of itemTypes) {
-                    accum += t.weight;
-                    if(rand <= accum) return t;
-                }
-                return itemTypes[0];
-            }
-            
-            try {
-                const saved = localStorage.getItem('labubaBest');
-                if(saved && !isNaN(parseInt(saved))) bestScore = parseInt(saved);
-            } catch(e) {}
-            
-            const scoreDisplaySpan = document.getElementById('scoreDisplay');
-            const bestDisplaySpan = document.getElementById('bestDisplay');
-            const pauseMenuDiv = document.getElementById('pauseMenu');
-            const helpMenuDiv = document.getElementById('helpMenu');
-            const pauseBtn = document.getElementById('pauseBtn');
-            const resumeGameBtn = document.getElementById('resumeGameBtn');
-            const themeTogglePause = document.getElementById('themeTogglePause');
-            const resetGamePause = document.getElementById('resetGamePause');
-            const helpButton = document.getElementById('helpButton');
-            const helpCloseBtn = document.getElementById('helpCloseBtn');
-            const fullscreenBtn = document.getElementById('fullscreenBtn');
-            
-            bestDisplaySpan.innerText = bestScore;
-            
-            helpButton.addEventListener('click', () => { helpMenuDiv.style.display = 'flex'; });
-            helpCloseBtn.addEventListener('click', () => { helpMenuDiv.style.display = 'none'; });
-            
-            let isDarkTheme = false;
-            function applyTheme() {
-                const body = document.body;
-                if(isDarkTheme) {
-                    body.classList.remove('light-theme');
-                    body.classList.add('dark-theme');
-                    themeTogglePause.innerHTML = '☀ Светлая тема';
-                } else {
-                    body.classList.remove('dark-theme');
-                    body.classList.add('light-theme');
-                    themeTogglePause.innerHTML = '☾ Тёмная тема';
-                }
-            }
-            function toggleTheme() { isDarkTheme = !isDarkTheme; applyTheme(); }
-            themeTogglePause.addEventListener('click', toggleTheme);
-            
-            function recalculateMultipliers() {
-                currentSpeedMultiplier = 1.0 + (speedStacks * SPEED_STACK_MULTIPLIER);
-                
-                if(speedStacks > 0) {
-                    statsPanel.classList.add('speed-mode');
-                    timerBadge.style.display = 'flex';
-                    speedTimerSpan.innerText = Math.ceil(speedBoostRemaining);
-                } else {
-                    statsPanel.classList.remove('speed-mode');
-                    timerBadge.style.display = 'none';
-                }
-                
-                if(slowStacks > 0) {
-                    statsPanel.classList.add('slow-mode');
-                    slowTimerBadge.style.display = 'flex';
-                    slowTimerSpan.innerText = Math.ceil(slowDebuffRemaining);
-                } else {
-                    statsPanel.classList.remove('slow-mode');
-                    slowTimerBadge.style.display = 'none';
-                }
-                
-                if(frozenActive) {
-                    statsPanel.classList.add('frozen-mode');
-                    frozenTimerBadge.style.display = 'flex';
-                    frozenTimerSpan.innerText = Math.ceil(frozenRemaining);
-                } else {
-                    statsPanel.classList.remove('frozen-mode');
-                    frozenTimerBadge.style.display = 'none';
-                }
-                
-                if(flyActive) {
-                    statsPanel.classList.add('fly-mode');
-                    flyTimerBadge.style.display = 'flex';
-                    flyTimerSpan.innerText = Math.ceil(flyRemaining);
-                } else {
-                    statsPanel.classList.remove('fly-mode');
-                    flyTimerBadge.style.display = 'none';
-                }
-            }
-            
-            function addSpeedStack() {
-                speedStacks++;
-                speedBoostRemaining += 60;
-                recalculateMultipliers();
-            }
-            
-            function addSlowStack() {
-                slowStacks++;
-                slowDebuffRemaining += 60;
-                recalculateMultipliers();
-            }
-            
-            function removeOneSlowStack() {
-                if(slowStacks > 0) {
-                    slowStacks--;
-                    if(slowStacks === 0) slowDebuffRemaining = 0;
-                    else slowDebuffRemaining = slowDebuffRemaining * (slowStacks / (slowStacks + 1));
-                    recalculateMultipliers();
-                    return true;
-                }
-                return false;
-            }
-            
-            function activateFreeze() {
-                frozenActive = true;
-                frozenRemaining = 20;
-                recalculateMultipliers();
-            }
-            
-            function activateFly() {
-                flyActive = true;
-                flyRemaining += 25;
-                recalculateMultipliers();
-            }
-            
-            function updateTimers(now) {
-                if(lastTimestamp === 0) { lastTimestamp = now; return; }
-                const delta = Math.min(0.1, (now - lastTimestamp) / 1000);
-                if(delta <= 0) return;
-                
-                if(speedStacks > 0) {
-                    speedBoostRemaining -= delta;
-                    if(speedBoostRemaining <= 0) {
-                        speedStacks = 0;
-                        speedBoostRemaining = 0;
-                        recalculateMultipliers();
-                    } else speedTimerSpan.innerText = Math.ceil(speedBoostRemaining);
-                }
-                
-                if(slowStacks > 0) {
-                    slowDebuffRemaining -= delta;
-                    if(slowDebuffRemaining <= 0) {
-                        slowStacks = 0;
-                        slowDebuffRemaining = 0;
-                        recalculateMultipliers();
-                    } else slowTimerSpan.innerText = Math.ceil(slowDebuffRemaining);
-                }
-                
-                if(frozenActive) {
-                    frozenRemaining -= delta;
-                    if(frozenRemaining <= 0) {
-                        frozenActive = false;
-                        frozenRemaining = 0;
-                        recalculateMultipliers();
-                    } else frozenTimerSpan.innerText = Math.ceil(frozenRemaining);
-                }
-                
-                if(flyActive) {
-                    flyRemaining -= delta;
-                    if(flyRemaining <= 0) {
-                        flyActive = false;
-                        flyRemaining = 0;
-                        recalculateMultipliers();
-                    } else {
-                        flyTimerSpan.innerText = Math.ceil(flyRemaining);
-                    }
-                }
-                
-                lastTimestamp = now;
-            }
-            
-            let pointerActive = false;
-            let targetLabubaX = labubaX;
-            let targetLabubaY = labubaY;
-            
-            function handleMove(clientX, clientY) {
-                if(!gameActive) return;
-                const rect = canvas.getBoundingClientRect();
-                const scaleX = canvas.width / rect.width;
-                const scaleY = canvas.height / rect.height;
-                let canvasX = (clientX - rect.left) * scaleX;
-                let canvasY = (clientY - rect.top) * scaleY;
-                
-                canvasX = Math.min(Math.max(canvasX, 5), CANVAS_W - LABUBA_WIDTH - 5);
-                
-                if(flyActive && !frozenActive) {
-                    canvasY = Math.min(Math.max(canvasY, 5), CANVAS_H - LABUBA_HEIGHT - 5);
-                    targetLabubaY = canvasY;
-                } else {
-                    targetLabubaY = GROUND_Y - LABUBA_HEIGHT + 4;
-                }
-                targetLabubaX = canvasX;
-            }
-            
-            function onPointerMove(e) {
-                if(!pointerActive) return;
-                e.preventDefault();
-                const clientX = e.clientX ?? (e.touches ? e.touches[0].clientX : null);
-                const clientY = e.clientY ?? (e.touches ? e.touches[0].clientY : null);
-                if(clientX !== undefined && clientY !== undefined) handleMove(clientX, clientY);
-            }
-            
-            function onPointerStart(e) {
-                e.preventDefault();
-                pointerActive = true;
-                const clientX = e.clientX ?? (e.touches ? e.touches[0].clientX : null);
-                const clientY = e.clientY ?? (e.touches ? e.touches[0].clientY : null);
-                if(clientX !== undefined && clientY !== undefined) handleMove(clientX, clientY);
-            }
-            
-            function onPointerEnd(e) { pointerActive = false; }
-            
-            canvas.addEventListener('mousemove', onPointerMove);
-            canvas.addEventListener('mousedown', onPointerStart);
-            window.addEventListener('mouseup', onPointerEnd);
-            canvas.addEventListener('touchmove', onPointerMove, {passive: false});
-            canvas.addEventListener('touchstart', onPointerStart, {passive: false});
-            canvas.addEventListener('touchend', onPointerEnd);
-            canvas.addEventListener('mouseleave', () => { pointerActive = false; });
-            
-            function updateLabubaPosition() {
-                if(!gameActive) return;
-                if(frozenActive) return;
-                
-                const diffX = targetLabubaX - labubaX;
-                const diffY = targetLabubaY - labubaY;
-                
-                let speedMultiplier = 1.0;
-                if(!flyActive) {
-                    speedMultiplier = Math.pow(SLOW_STACK_FACTOR, slowStacks);
-                    if(slowStacks === 0) speedMultiplier = 1.0;
-                    if(speedMultiplier < 0.05) speedMultiplier = 0.05;
-                } else {
-                    speedMultiplier = 0.25;
-                }
-                
-                let stepX = diffX * 0.22 * speedMultiplier;
-                if(Math.abs(stepX) < 0.5 && Math.abs(diffX) > 0) stepX = Math.sign(diffX) * 0.5 * speedMultiplier;
-                labubaX += stepX;
-                labubaX = Math.min(Math.max(labubaX, 5), CANVAS_W - LABUBA_WIDTH - 5);
-                
-                if(flyActive && !frozenActive) {
-                    let stepY = diffY * 0.22;
-                    if(Math.abs(stepY) < 0.5 && Math.abs(diffY) > 0) stepY = Math.sign(diffY) * 0.5;
-                    labubaY += stepY;
-                    labubaY = Math.min(Math.max(labubaY, 5), CANVAS_H - LABUBA_HEIGHT - 5);
-                } else {
-                    labubaY = GROUND_Y - LABUBA_HEIGHT + 4;
-                }
-            }
-            
-            function spawnItem() {
-                if(!gameActive) return;
-                const randX = 15 + Math.random() * (CANVAS_W - ITEM_SIZE - 15);
-                const typeObj = getRandomItemType();
-                
-                let speed = typeObj.baseSpeed;
-                speed = speed * currentSpeedMultiplier;
-                speed += (Math.random() * 0.5 - 0.25);
-                
-                items.push({
-                    x: randX,
-                    y: -ITEM_SIZE,
-                    w: ITEM_SIZE,
-                    h: ITEM_SIZE,
-                    type: typeObj.emoji,
-                    points: typeObj.points,
-                    speed: speed,
-                    vx: 0,
-                    isSausage: typeObj.emoji === '🌭',
-                    isPoop: typeObj.emoji === '💩',
-                    isPill: typeObj.emoji === '💊',
-                    isIce: typeObj.emoji === '🧊',
-                    isRocket: typeObj.emoji === '🚀'
-                });
-            }
-            
-            function updateItems() {
-                for(let i=0; i<items.length; i++) {
-                    const item = items[i];
-                    
-                    if(item.vx !== 0) {
-                        item.x += item.vx;
-                        item.vx *= 0.98;
-                        if(Math.abs(item.vx) < 0.1) item.vx = 0;
-                    }
-                    
-                    item.y += item.speed;
-                    
-                    const collides = (item.x < labubaX + LABUBA_WIDTH &&
-                                       item.x + item.w > labubaX &&
-                                       item.y < labubaY + LABUBA_HEIGHT &&
-                                       item.y + item.h > labubaY);
-                    
-                    if(collides) {
-                        if(frozenActive) {
-                            const direction = (item.x + item.w/2) - (labubaX + LABUBA_WIDTH/2);
-                            item.vx = Math.sign(direction) * 3.5;
-                            item.y = labubaY - item.h - 2;
-                            continue;
-                        } else {
-                            if(item.isSausage) addSpeedStack();
-                            if(item.isPoop) {
-                                addSlowStack();
-                                if(flyActive) {
-                                    flyActive = false;
-                                    flyRemaining = 0;
-                                    labubaY = GROUND_Y - LABUBA_HEIGHT + 4;
-                                    recalculateMultipliers();
-                                }
-                            }
-                            if(item.isPill) removeOneSlowStack();
-                            if(item.isIce) {
-                                activateFreeze();
-                                if(flyActive) {
-                                    flyActive = false;
-                                    flyRemaining = 0;
-                                    labubaY = GROUND_Y - LABUBA_HEIGHT + 4;
-                                    recalculateMultipliers();
-                                }
-                            }
-                            if(item.isRocket) activateFly();
-                            
-                            score += item.points;
-                            if(score < 0) score = 0;
-                            updateUI();
-                            items.splice(i,1);
-                            i--;
-                            continue;
-                        }
-                    }
-                    
-                    if(item.y + item.h > GROUND_Y + 35 || item.x + item.w < 0 || item.x > CANVAS_W) {
-                        items.splice(i,1);
-                        i--;
-                    }
-                }
-            }
-            
-            function handleSpawning() {
-                if(!gameActive) return;
-                frameCounter++;
-                let currentRate = baseSpawnRate;
-                if(speedStacks > 0) currentRate = Math.max(38, baseSpawnRate - 10);
-                
-                if(frameCounter - lastSpawnFrame >= currentRate) {
-                    lastSpawnFrame = frameCounter;
-                    spawnItem();
-                    if(Math.random() < 0.05 && gameActive) spawnItem();
-                }
-            }
-            
-            function updateUI() {
-                scoreDisplaySpan.innerText = score;
-                if(score > bestScore) {
-                    bestScore = score;
-                    bestDisplaySpan.innerText = bestScore;
-                    try {
-                        localStorage.setItem('labubaBest', bestScore);
-                    } catch(e) {}
-                }
-            }
-            
-            function setPause(active) {
-                if(active) { gameActive = false; pauseMenuDiv.style.display = 'flex'; }
-                else { gameActive = true; pauseMenuDiv.style.display = 'none'; }
-            }
-            function resumeGame() { setPause(false); }
-            pauseBtn.addEventListener('click', () => { if(gameActive) setPause(true); });
-            resumeGameBtn.addEventListener('click', resumeGame);
-            
-            function resetGame() {
-                gameActive = true;
-                score = 0;
-                items = [];
-                labubaX = CANVAS_W/2 - LABUBA_WIDTH/2;
-                labubaY = GROUND_Y - LABUBA_HEIGHT + 4;
-                targetLabubaX = labubaX;
-                targetLabubaY = labubaY;
-                frameCounter = 0;
-                lastSpawnFrame = 0;
-                
-                speedStacks = 0;
-                slowStacks = 0;
-                frozenActive = false;
-                frozenRemaining = 0;
-                flyActive = false;
-                flyRemaining = 0;
-                speedBoostRemaining = 0;
-                slowDebuffRemaining = 0;
-                currentSpeedMultiplier = 1.0;
-                
-                statsPanel.classList.remove('speed-mode', 'slow-mode', 'frozen-mode', 'fly-mode');
-                timerBadge.style.display = 'none';
-                slowTimerBadge.style.display = 'none';
-                frozenTimerBadge.style.display = 'none';
-                flyTimerBadge.style.display = 'none';
-                updateUI();
-                if(pauseMenuDiv.style.display === 'flex') setPause(false);
-                for(let i=0;i<2;i++) spawnItem();
-            }
-            resetGamePause.addEventListener('click', resetGame);
-            
-            function toggleFullscreen() {
-                const elem = gameContainer;
-                if (!document.fullscreenElement) elem.requestFullscreen().catch(err => {});
-                else document.exitFullscreen();
-            }
-            fullscreenBtn.addEventListener('click', toggleFullscreen);
-            
-            function handleCanvasResize() {
-                const containerRect = gameContainer.getBoundingClientRect();
-                const maxHeight = window.innerHeight * 0.92;
-                const scale = Math.min(containerRect.width / CANVAS_W, maxHeight / CANVAS_H);
-                canvas.style.width = `${CANVAS_W * scale}px`;
-                canvas.style.height = `${CANVAS_H * scale}px`;
-            }
-            window.addEventListener('resize', handleCanvasResize);
-            handleCanvasResize();
-            
-            function getCurrentLabubaImage() {
-                if (frozenActive) return window.labubaFrozen;
-                if (slowStacks > 0) return window.labubaPoop;
-                return window.labubaNormal;
-            }
-            
-            function drawLabuba(x, y, w, h) {
-                const currentImg = getCurrentLabubaImage();
-                
-                if (currentImg && currentImg.complete && currentImg.naturalWidth > 0) {
-                    ctx.drawImage(currentImg, x, y, w, h);
-                    if(flyActive && !frozenActive) {
-                        ctx.fillStyle = "#E84A5F";
-                        ctx.font = `18px "Apple Color Emoji"`;
-                        ctx.fillText("🚀", x + w - 8, y - 4);
-                    }
-                    return;
-                }
-                
-                ctx.save();
-                if (frozenActive) {
-                    ctx.fillStyle = "#4A90D9";
-                    ctx.beginPath();
-                    ctx.ellipse(x+w/2, y+h/2, w*0.35, h*0.4, 0, 0, Math.PI*2);
-                    ctx.fill();
-                    ctx.fillStyle = "#ffffff";
-                    ctx.font = `28px "Apple Color Emoji"`;
-                    ctx.fillText("❄️", x + w/2 - 14, y + h/2 + 10);
-                } else if (slowStacks > 0) {
-                    ctx.fillStyle = "#8B6914";
-                    ctx.beginPath();
-                    ctx.ellipse(x+w/2, y+h/2, w*0.35, h*0.4, 0, 0, Math.PI*2);
-                    ctx.fill();
-                    ctx.fillStyle = "#ffffff";
-                    ctx.font = `24px "Apple Color Emoji"`;
-                    ctx.fillText("💩", x + w/2 - 12, y + h/2 + 10);
-                } else {
-                    ctx.fillStyle = "#b980f0";
-                    ctx.beginPath();
-                    ctx.ellipse(x+w/2, y+h/2, w*0.35, h*0.4, 0, 0, Math.PI*2);
-                    ctx.fill();
-                    ctx.fillStyle = "#2f1b47";
-                    ctx.beginPath();
-                    ctx.arc(x+w*0.35, y+h*0.4, 4, 0, Math.PI*2);
-                    ctx.fill();
-                    ctx.beginPath();
-                    ctx.arc(x+w*0.65, y+h*0.4, 4, 0, Math.PI*2);
-                    ctx.fill();
-                    ctx.fillStyle = "white";
-                    ctx.beginPath();
-                    ctx.arc(x+w*0.33, y+h*0.38, 1.5, 0, Math.PI*2);
-                    ctx.fill();
-                    ctx.beginPath();
-                    ctx.arc(x+w*0.63, y+h*0.38, 1.5, 0, Math.PI*2);
-                    ctx.fill();
-                }
+            if (currentImg && currentImg.complete && currentImg.naturalWidth > 0) {
+                ctx.drawImage(currentImg, x, y, w, h);
                 if(flyActive && !frozenActive) {
                     ctx.fillStyle = "#E84A5F";
                     ctx.font = `18px "Apple Color Emoji"`;
                     ctx.fillText("🚀", x + w - 8, y - 4);
                 }
-                ctx.restore();
+                return;
             }
             
-            function drawItem(item) {
-                ctx.font = `${ITEM_SIZE}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
-                ctx.textAlign = "center";
-                ctx.textBaseline = "middle";
-                ctx.shadowBlur = 0;
-                ctx.fillText(item.type, item.x + ITEM_SIZE/2, item.y + ITEM_SIZE/2);
+            ctx.save();
+            if (frozenActive) {
+                ctx.fillStyle = "#4A90D9";
+                ctx.beginPath();
+                ctx.ellipse(x+w/2, y+h/2, w*0.35, h*0.4, 0, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = "#ffffff";
+                ctx.font = `28px "Apple Color Emoji"`;
+                ctx.fillText("❄️", x + w/2 - 14, y + h/2 + 10);
+            } else if (slowStacks > 0) {
+                ctx.fillStyle = "#8B6914";
+                ctx.beginPath();
+                ctx.ellipse(x+w/2, y+h/2, w*0.35, h*0.4, 0, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = "#ffffff";
+                ctx.font = `24px "Apple Color Emoji"`;
+                ctx.fillText("💩", x + w/2 - 12, y + h/2 + 10);
+            } else {
+                ctx.fillStyle = "#b980f0";
+                ctx.beginPath();
+                ctx.ellipse(x+w/2, y+h/2, w*0.35, h*0.4, 0, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = "#2f1b47";
+                ctx.beginPath();
+                ctx.arc(x+w*0.35, y+h*0.4, 4, 0, Math.PI*2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(x+w*0.65, y+h*0.4, 4, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = "white";
+                ctx.beginPath();
+                ctx.arc(x+w*0.33, y+h*0.38, 1.5, 0, Math.PI*2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(x+w*0.63, y+h*0.38, 1.5, 0, Math.PI*2);
+                ctx.fill();
+            }
+            if(flyActive && !frozenActive) {
+                ctx.fillStyle = "#E84A5F";
+                ctx.font = `18px "Apple Color Emoji"`;
+                ctx.fillText("🚀", x + w - 8, y - 4);
+            }
+            ctx.restore();
+        }
+        
+        function drawItem(item) {
+            ctx.font = `${ITEM_SIZE}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.shadowBlur = 0;
+            ctx.fillText(item.type, item.x + ITEM_SIZE/2, item.y + ITEM_SIZE/2);
+        }
+        
+        let stars = [];
+        for(let i = 0; i < 120; i++) {
+            stars.push({
+                x: Math.random() * CANVAS_W,
+                y: Math.random() * CANVAS_H,
+                size: Math.random() * 1.5 + 0.5,
+                alpha: Math.random() * 0.4 + 0.2
+            });
+        }
+        
+        function drawSpaceBackground() {
+            ctx.fillStyle = "#0a0a1a";
+            ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+            for(let s of stars) {
+                ctx.fillStyle = `rgba(255, 238, 204, ${s.alpha})`;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        function getVisualState() {
+            if(flyActive) return 'fly';
+            if(frozenActive) return 'frozen';
+            if(slowStacks > 0) return 'poison';
+            return 'normal';
+        }
+        
+        function drawMoonIsland() {
+            ctx.beginPath();
+            ctx.moveTo(-5, GROUND_Y + 8);
+            ctx.quadraticCurveTo(CANVAS_W / 2, GROUND_Y - 15, CANVAS_W + 5, GROUND_Y + 8);
+            ctx.lineTo(CANVAS_W + 5, GROUND_Y + 28);
+            ctx.quadraticCurveTo(CANVAS_W / 2, GROUND_Y + 35, -5, GROUND_Y + 28);
+            ctx.fillStyle = "#8B8B9A";
+            ctx.fill();
+            
+            ctx.beginPath();
+            ctx.moveTo(-3, GROUND_Y + 6);
+            ctx.quadraticCurveTo(CANVAS_W / 2, GROUND_Y - 17, CANVAS_W + 3, GROUND_Y + 6);
+            ctx.fillStyle = "#A0A0B0";
+            ctx.fill();
+            
+            ctx.fillStyle = "#6B6B7A";
+            ctx.beginPath();
+            ctx.ellipse(70, GROUND_Y + 10, 12, 6, 0, 0, Math.PI*2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(CANVAS_W - 60, GROUND_Y + 12, 14, 7, 0, 0, Math.PI*2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(140, GROUND_Y + 5, 8, 4, 0, 0, Math.PI*2);
+            ctx.fill();
+            
+            ctx.font = `20px "Apple Color Emoji"`;
+            ctx.fillStyle = "#C0C0D0";
+            ctx.fillText("🛸", 10, GROUND_Y - 3);
+            ctx.fillText("🛸", CANVAS_W - 32, GROUND_Y - 5);
+            ctx.fillText("🛰️", 4, GROUND_Y + 6);
+            ctx.fillText("🛰️", CANVAS_W - 26, GROUND_Y + 4);
+        }
+        
+        function drawNormalIsland(state) {
+            let groundColor1, groundColor2, strokeColor;
+            if(state === 'frozen') {
+                groundColor1 = "#B0E0FF";
+                groundColor2 = "#D0F0FF";
+                strokeColor = "#80C0E0";
+            } else if(state === 'poison') {
+                groundColor1 = "#8B7D6B";
+                groundColor2 = "#9B8D7B";
+                strokeColor = "#6B5D4B";
+            } else {
+                groundColor1 = "#82b74e";
+                groundColor2 = "#8fc95c";
+                strokeColor = "#6a9c3e";
             }
             
-            let stars = [];
-            for(let i = 0; i < 120; i++) {
-                stars.push({
-                    x: Math.random() * CANVAS_W,
-                    y: Math.random() * CANVAS_H,
-                    size: Math.random() * 1.5 + 0.5,
-                    alpha: Math.random() * 0.4 + 0.2
-                });
-            }
+            ctx.beginPath();
+            ctx.moveTo(-5, GROUND_Y + 8);
+            ctx.quadraticCurveTo(CANVAS_W / 2, GROUND_Y - 15, CANVAS_W + 5, GROUND_Y + 8);
+            ctx.lineTo(CANVAS_W + 5, GROUND_Y + 28);
+            ctx.quadraticCurveTo(CANVAS_W / 2, GROUND_Y + 35, -5, GROUND_Y + 28);
+            ctx.fillStyle = groundColor1;
+            ctx.fill();
             
-            function drawSpaceBackground() {
-                ctx.fillStyle = "#0a0a1a";
-                ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-                for(let s of stars) {
-                    ctx.fillStyle = `rgba(255, 238, 204, ${s.alpha})`;
+            ctx.beginPath();
+            ctx.moveTo(-3, GROUND_Y + 6);
+            ctx.quadraticCurveTo(CANVAS_W / 2, GROUND_Y - 17, CANVAS_W + 3, GROUND_Y + 6);
+            ctx.fillStyle = groundColor2;
+            ctx.fill();
+            
+            ctx.beginPath();
+            ctx.moveTo(-3, GROUND_Y + 6);
+            ctx.quadraticCurveTo(CANVAS_W / 2, GROUND_Y - 17, CANVAS_W + 3, GROUND_Y + 6);
+            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+        }
+        
+        function drawGrass(state) {
+            if(state === 'frozen') {
+                const snowmen = [
+                    { x: 25, y: GROUND_Y + 2 },
+                    { x: 60, y: GROUND_Y - 1 },
+                    { x: CANVAS_W - 30, y: GROUND_Y },
+                    { x: CANVAS_W - 65, y: GROUND_Y - 2 }
+                ];
+                for(let s of snowmen) {
+                    ctx.font = `20px "Apple Color Emoji"`;
+                    ctx.textAlign = "center";
+                    ctx.fillText("⛄", s.x, s.y);
+                }
+            } 
+            else if(state === 'poison') {
+                const poisonBushes = [
+                    { x: 18, y: GROUND_Y + 2 },
+                    { x: 45, y: GROUND_Y },
+                    { x: CANVAS_W - 28, y: GROUND_Y + 1 },
+                    { x: CANVAS_W - 58, y: GROUND_Y - 1 }
+                ];
+                for(let bush of poisonBushes) {
+                    ctx.font = `20px "Apple Color Emoji"`;
+                    ctx.fillText("💩", bush.x, bush.y);
+                }
+            }
+            else if(state !== 'fly') {
+                const bushes = [
+                    { x: 15, y: GROUND_Y + 5, size: 10 },
+                    { x: 35, y: GROUND_Y + 7, size: 8 },
+                    { x: 55, y: GROUND_Y + 4, size: 12 },
+                    { x: CANVAS_W - 20, y: GROUND_Y + 5, size: 11 },
+                    { x: CANVAS_W - 45, y: GROUND_Y + 7, size: 9 },
+                    { x: CANVAS_W - 70, y: GROUND_Y + 4, size: 8 }
+                ];
+                for(let bush of bushes) {
+                    const x = bush.x;
+                    const baseY = bush.y;
+                    const size = bush.size;
                     ctx.beginPath();
-                    ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+                    ctx.ellipse(x, baseY, size, size * 0.7, 0, 0, Math.PI * 2);
+                    ctx.fillStyle = "#5c8f2f";
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.ellipse(x - 3, baseY - 3, size * 0.6, size * 0.5, 0, 0, Math.PI * 2);
+                    ctx.fillStyle = "#6a9c3e";
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.ellipse(x + 3, baseY - 2, size * 0.55, size * 0.5, 0, 0, Math.PI * 2);
+                    ctx.fillStyle = "#7aad4e";
                     ctx.fill();
                 }
             }
-            
-            function getVisualState() {
-                if(flyActive) return 'fly';
-                if(frozenActive) return 'frozen';
-                if(slowStacks > 0) return 'poison';
-                return 'normal';
-            }
-            
-            function drawMoonIsland() {
-                ctx.beginPath();
-                ctx.moveTo(-5, GROUND_Y + 8);
-                ctx.quadraticCurveTo(CANVAS_W / 2, GROUND_Y - 15, CANVAS_W + 5, GROUND_Y + 8);
-                ctx.lineTo(CANVAS_W + 5, GROUND_Y + 28);
-                ctx.quadraticCurveTo(CANVAS_W / 2, GROUND_Y + 35, -5, GROUND_Y + 28);
-                ctx.fillStyle = "#8B8B9A";
-                ctx.fill();
-                
-                ctx.beginPath();
-                ctx.moveTo(-3, GROUND_Y + 6);
-                ctx.quadraticCurveTo(CANVAS_W / 2, GROUND_Y - 17, CANVAS_W + 3, GROUND_Y + 6);
-                ctx.fillStyle = "#A0A0B0";
-                ctx.fill();
-                
-                ctx.fillStyle = "#6B6B7A";
-                ctx.beginPath();
-                ctx.ellipse(70, GROUND_Y + 10, 12, 6, 0, 0, Math.PI*2);
-                ctx.fill();
-                ctx.beginPath();
-                ctx.ellipse(CANVAS_W - 60, GROUND_Y + 12, 14, 7, 0, 0, Math.PI*2);
-                ctx.fill();
-                ctx.beginPath();
-                ctx.ellipse(140, GROUND_Y + 5, 8, 4, 0, 0, Math.PI*2);
-                ctx.fill();
-                
-                ctx.font = `20px "Apple Color Emoji"`;
-                ctx.fillStyle = "#C0C0D0";
-                ctx.fillText("🛸", 10, GROUND_Y - 3);
-                ctx.fillText("🛸", CANVAS_W - 32, GROUND_Y - 5);
-                ctx.fillText("🛰️", 4, GROUND_Y + 6);
-                ctx.fillText("🛰️", CANVAS_W - 26, GROUND_Y + 4);
-            }
-            
-            function drawNormalIsland(state) {
-                let groundColor1, groundColor2, strokeColor;
-                if(state === 'frozen') {
-                    groundColor1 = "#B0E0FF";
-                    groundColor2 = "#D0F0FF";
-                    strokeColor = "#80C0E0";
-                } else if(state === 'poison') {
-                    groundColor1 = "#8B7D6B";
-                    groundColor2 = "#9B8D7B";
-                    strokeColor = "#6B5D4B";
-                } else {
-                    groundColor1 = "#82b74e";
-                    groundColor2 = "#8fc95c";
-                    strokeColor = "#6a9c3e";
-                }
-                
-                ctx.beginPath();
-                ctx.moveTo(-5, GROUND_Y + 8);
-                ctx.quadraticCurveTo(CANVAS_W / 2, GROUND_Y - 15, CANVAS_W + 5, GROUND_Y + 8);
-                ctx.lineTo(CANVAS_W + 5, GROUND_Y + 28);
-                ctx.quadraticCurveTo(CANVAS_W / 2, GROUND_Y + 35, -5, GROUND_Y + 28);
-                ctx.fillStyle = groundColor1;
-                ctx.fill();
-                
-                ctx.beginPath();
-                ctx.moveTo(-3, GROUND_Y + 6);
-                ctx.quadraticCurveTo(CANVAS_W / 2, GROUND_Y - 17, CANVAS_W + 3, GROUND_Y + 6);
-                ctx.fillStyle = groundColor2;
-                ctx.fill();
-                
-                ctx.beginPath();
-                ctx.moveTo(-3, GROUND_Y + 6);
-                ctx.quadraticCurveTo(CANVAS_W / 2, GROUND_Y - 17, CANVAS_W + 3, GROUND_Y + 6);
-                ctx.strokeStyle = strokeColor;
-                ctx.lineWidth = 1.2;
-                ctx.stroke();
-            }
-            
-            function drawGrass(state) {
-                if(state === 'frozen') {
-                    const snowmen = [
-                        { x: 25, y: GROUND_Y + 2 },
-                        { x: 60, y: GROUND_Y - 1 },
-                        { x: CANVAS_W - 30, y: GROUND_Y },
-                        { x: CANVAS_W - 65, y: GROUND_Y - 2 }
-                    ];
-                    for(let s of snowmen) {
-                        ctx.font = `20px "Apple Color Emoji"`;
-                        ctx.textAlign = "center";
-                        ctx.fillText("⛄", s.x, s.y);
-                    }
-                } 
-                else if(state === 'poison') {
-                    const poisonBushes = [
-                        { x: 18, y: GROUND_Y + 2 },
-                        { x: 45, y: GROUND_Y },
-                        { x: CANVAS_W - 28, y: GROUND_Y + 1 },
-                        { x: CANVAS_W - 58, y: GROUND_Y - 1 }
-                    ];
-                    for(let bush of poisonBushes) {
-                        ctx.font = `20px "Apple Color Emoji"`;
-                        ctx.fillText("💩", bush.x, bush.y);
-                    }
-                }
-                else if(state !== 'fly') {
-                    const bushes = [
-                        { x: 15, y: GROUND_Y + 5, size: 10 },
-                        { x: 35, y: GROUND_Y + 7, size: 8 },
-                        { x: 55, y: GROUND_Y + 4, size: 12 },
-                        { x: CANVAS_W - 20, y: GROUND_Y + 5, size: 11 },
-                        { x: CANVAS_W - 45, y: GROUND_Y + 7, size: 9 },
-                        { x: CANVAS_W - 70, y: GROUND_Y + 4, size: 8 }
-                    ];
-                    for(let bush of bushes) {
-                        const x = bush.x;
-                        const baseY = bush.y;
-                        const size = bush.size;
-                        ctx.beginPath();
-                        ctx.ellipse(x, baseY, size, size * 0.7, 0, 0, Math.PI * 2);
-                        ctx.fillStyle = "#5c8f2f";
-                        ctx.fill();
-                        ctx.beginPath();
-                        ctx.ellipse(x - 3, baseY - 3, size * 0.6, size * 0.5, 0, 0, Math.PI * 2);
-                        ctx.fillStyle = "#6a9c3e";
-                        ctx.fill();
-                        ctx.beginPath();
-                        ctx.ellipse(x + 3, baseY - 2, size * 0.55, size * 0.5, 0, 0, Math.PI * 2);
-                        ctx.fillStyle = "#7aad4e";
-                        ctx.fill();
-                    }
-                }
-            }
-            
-            function drawIsland() {
-                const state = getVisualState();
-                
-                if(state === 'fly') {
-                    drawSpaceBackground();
-                    drawMoonIsland();
-                } else {
-                    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-                    drawNormalIsland(state);
-                    drawGrass(state);
-                }
-            }
-            
-            function gameLoop(now) {
-                if(gameActive) {
-                    updateTimers(now);
-                    updateLabubaPosition();
-                    updateItems();
-                    handleSpawning();
-                }
-                drawIsland();
-                drawLabuba(labubaX, labubaY, LABUBA_WIDTH, LABUBA_HEIGHT);
-                for(let item of items) drawItem(item);
-                requestAnimationFrame(gameLoop);
-            }
-            
-            resetGame();
-            applyTheme();
-            gameLoop();
-            
-            canvas.addEventListener('touchstart', (e) => { e.preventDefault(); }, {passive: false});
-            canvas.addEventListener('touchmove', (e) => { e.preventDefault(); }, {passive: false});
         }
+        
+        function drawIsland() {
+            const state = getVisualState();
+            
+            if(state === 'fly') {
+                drawSpaceBackground();
+                drawMoonIsland();
+            } else {
+                ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+                drawNormalIsland(state);
+                drawGrass(state);
+            }
+        }
+        
+        function gameLoop(now) {
+            if(gameActive) {
+                updateTimers(now);
+                updateLabubaPosition();
+                updateItems();
+                handleSpawning();
+            }
+            drawIsland();
+            drawLabuba(labubaX, labubaY, LABUBA_WIDTH, LABUBA_HEIGHT);
+            for(let item of items) drawItem(item);
+            requestAnimationFrame(gameLoop);
+        }
+        
+        resetGame();
+        applyTheme();
+        gameLoop();
+        
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); }, {passive: false});
+        canvas.addEventListener('touchmove', (e) => { e.preventDefault(); }, {passive: false});
     })();
 </script>
 </body>
