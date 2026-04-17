@@ -336,6 +336,20 @@
 
 <script>
     (function(){
+        // ========== ОБЯЗАТЕЛЬНЫЙ КОД ДЛЯ VK MINI APP ==========
+        // Отправляем сигнал, что приложение загружено
+        if (window.vkBridge) {
+            window.vkBridge.send('VKWebAppInit');
+        } else {
+            // Ждём, когда подгрузится VK Bridge
+            window.addEventListener('VKWebAppUpdateConfig', function () {
+                if (window.vkBridge) {
+                    window.vkBridge.send('VKWebAppInit');
+                }
+            });
+        }
+        // ========== КОНЕЦ ОБЯЗАТЕЛЬНОГО КОДА ==========
+        
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const gameContainer = document.getElementById('gameContainer');
@@ -354,10 +368,9 @@
         canvas.width = CANVAS_W;
         canvas.height = CANVAS_H;
         
-        // ОСТРОВОК В САМОМ НИЗУ
         const GROUND_Y = CANVAS_H - 28;
-        const LABUBA_WIDTH = 58;
-        const LABUBA_HEIGHT = 58;
+        const LABUBA_WIDTH = 90;
+        const LABUBA_HEIGHT = 90;
         const ITEM_SIZE = 30;
         
         let labubaX = CANVAS_W/2 - LABUBA_WIDTH/2;
