@@ -316,7 +316,7 @@
 
 <script>
     (function(){
-        // Инициализация VK Bridge (обязательно для VK Games!)
+        // Инициализация VK Bridge
         if (window.vkBridge) {
             vkBridge.send("VKWebAppInit");
             vkBridge.send("VKWebAppGameStart");
@@ -333,25 +333,18 @@
         const ctx = canvas.getContext('2d');
         const gameContainer = document.getElementById('gameContainer');
         
-        // Адаптивный размер канваса — на весь экран
-        function resizeCanvas() {
-            const container = gameContainer.getBoundingClientRect();
-            canvas.width = container.width;
-            canvas.height = container.height;
-        }
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
+        // Фиксированный размер канваса для стабильности
+        const CANVAS_W = 450;
+        const CANVAS_H = 700;
+        canvas.width = CANVAS_W;
+        canvas.height = CANVAS_H;
         
-        const CANVAS_W = canvas.width;
-        const CANVAS_H = canvas.height;
+        const GROUND_Y = CANVAS_H - 55;
+        const LABUBA_SIZE = 85;
+        const ITEM_SIZE = 34;
         
-        const GROUND_Y = CANVAS_H - 40;
-        const LABUBA_WIDTH = 110;
-        const LABUBA_HEIGHT = 110;
-        const ITEM_SIZE = 40;
-        
-        let labubaX = CANVAS_W/2 - LABUBA_WIDTH/2;
-        let labubaY = GROUND_Y - LABUBA_HEIGHT + 10;
+        let labubaX = CANVAS_W/2 - LABUBA_SIZE/2;
+        let labubaY = GROUND_Y - LABUBA_SIZE + 8;
         
         let items = [];
         let score = 0;
@@ -374,23 +367,22 @@
         
         let currentSpeedMultiplier = 1.0;
         
-        // Увеличенные базовые скорости
-        const BASE_FRUIT_SPEED = 2.2;
-        const BASE_EFFECT_SPEED = 3.2;
+        const BASE_FRUIT_SPEED = 2.5;
+        const BASE_EFFECT_SPEED = 3.5;
         
         let lastSpawnFrame = 0;
         let frameCounter = 0;
-        let baseSpawnRate = 55;
+        let baseSpawnRate = 48;
         
         const itemTypes = [
-            { emoji: '🍬', points: 1, baseSpeed: BASE_FRUIT_SPEED, weight: 24, isEffect: false },
-            { emoji: '🍩', points: 1, baseSpeed: BASE_FRUIT_SPEED, weight: 18, isEffect: false },
-            { emoji: '🍓', points: 1, baseSpeed: BASE_FRUIT_SPEED, weight: 18, isEffect: false },
-            { emoji: '💊', points: 2, baseSpeed: BASE_EFFECT_SPEED, weight: 6, isEffect: true },
-            { emoji: '🌭', points: 1, baseSpeed: BASE_EFFECT_SPEED, weight: 5, isEffect: true },
-            { emoji: '💩', points: -2, baseSpeed: BASE_EFFECT_SPEED, weight: 8, isEffect: true },
-            { emoji: '🧊', points: 0, baseSpeed: BASE_EFFECT_SPEED + 0.8, weight: 3, isEffect: true },
-            { emoji: '🚀', points: 0, baseSpeed: BASE_EFFECT_SPEED, weight: 3, isEffect: true }
+            { emoji: '🍬', points: 1, baseSpeed: BASE_FRUIT_SPEED, weight: 24 },
+            { emoji: '🍩', points: 1, baseSpeed: BASE_FRUIT_SPEED, weight: 18 },
+            { emoji: '🍓', points: 1, baseSpeed: BASE_FRUIT_SPEED, weight: 18 },
+            { emoji: '💊', points: 2, baseSpeed: BASE_EFFECT_SPEED, weight: 6 },
+            { emoji: '🌭', points: 1, baseSpeed: BASE_EFFECT_SPEED, weight: 5 },
+            { emoji: '💩', points: -2, baseSpeed: BASE_EFFECT_SPEED, weight: 8 },
+            { emoji: '🧊', points: 0, baseSpeed: BASE_EFFECT_SPEED + 0.8, weight: 3 },
+            { emoji: '🚀', points: 0, baseSpeed: BASE_EFFECT_SPEED, weight: 3 }
         ];
         
         function getRandomItemType() {
@@ -443,9 +435,9 @@
         function toggleTheme() { isDarkTheme = !isDarkTheme; applyTheme(); }
         themeTogglePause.addEventListener('click', toggleTheme);
         
-        // Исправленный полноэкранный режим
+        // Полноэкранный режим
         fullscreenBtn.addEventListener('click', () => {
-            const elem = document.documentElement;
+            const elem = gameContainer;
             if (!document.fullscreenElement) {
                 elem.requestFullscreen().catch(err => console.warn(err));
             } else {
@@ -586,15 +578,13 @@
             let canvasX = (clientX - rect.left) * scaleX;
             let canvasY = (clientY - rect.top) * scaleY;
             
-            canvasX = Math.min(Math.max(canvasX, 5), canvas.width - LABUBA_WIDTH - 5);
+            canvasX = Math.min(Math.max(canvasX, LABUBA_SIZE/2), CANVAS_W - LABUBA_SIZE/2);
             
             if(flyActive && !frozenActive) {
-                canvasY = Math.min(Math.max(canvasY, 5), canvas.height - LABUBA_HEIGHT - 5);
-                targetLabubaY = canvasY;
-            } else {
-                targetLabubaY = GROUND_Y - LABUBA_HEIGHT + 10;
+                canvasY = Math.min(Math.max(canvasY, LABUBA_SIZE/2), CANVAS_H - LABUBA_SIZE/2);
+                targetLabubaY = canvasY - LABUBA_SIZE/2;
             }
-            targetLabubaX = canvasX;
+            targetLabubaX = canvasX - LABUBA_SIZE/2;
         }
         
         function onPointerMove(e) {
@@ -628,40 +618,38 @@
             if(frozenActive) return;
             
             const diffX = targetLabubaX - labubaX;
-            const diffY = targetLabubaY - labubaY;
-            
             let speedMultiplier = 1.0;
             if(!flyActive) {
                 speedMultiplier = Math.pow(SLOW_STACK_FACTOR, slowStacks);
                 if(slowStacks === 0) speedMultiplier = 1.0;
                 if(speedMultiplier < 0.05) speedMultiplier = 0.05;
             } else {
-                speedMultiplier = 0.25;
+                speedMultiplier = 0.2;
             }
             
-            let stepX = diffX * 0.22 * speedMultiplier;
+            let stepX = diffX * 0.25 * speedMultiplier;
             if(Math.abs(stepX) < 0.5 && Math.abs(diffX) > 0) stepX = Math.sign(diffX) * 0.5 * speedMultiplier;
             labubaX += stepX;
-            labubaX = Math.min(Math.max(labubaX, 5), canvas.width - LABUBA_WIDTH - 5);
+            labubaX = Math.min(Math.max(labubaX, 5), CANVAS_W - LABUBA_SIZE - 5);
             
             if(flyActive && !frozenActive) {
-                let stepY = diffY * 0.22;
+                const diffY = targetLabubaY - labubaY;
+                let stepY = diffY * 0.25;
                 if(Math.abs(stepY) < 0.5 && Math.abs(diffY) > 0) stepY = Math.sign(diffY) * 0.5;
                 labubaY += stepY;
-                labubaY = Math.min(Math.max(labubaY, 5), canvas.height - LABUBA_HEIGHT - 5);
+                labubaY = Math.min(Math.max(labubaY, 5), CANVAS_H - LABUBA_SIZE - 5);
             } else {
-                labubaY = GROUND_Y - LABUBA_HEIGHT + 10;
+                labubaY = GROUND_Y - LABUBA_SIZE + 8;
             }
         }
         
         function spawnItem() {
             if(!gameActive) return;
-            const randX = 15 + Math.random() * (canvas.width - ITEM_SIZE - 15);
+            const randX = 15 + Math.random() * (CANVAS_W - ITEM_SIZE - 15);
             const typeObj = getRandomItemType();
             
-            let speed = typeObj.baseSpeed;
-            speed = speed * currentSpeedMultiplier;
-            speed += (Math.random() * 0.8 - 0.4);
+            let speed = typeObj.baseSpeed * currentSpeedMultiplier;
+            speed += (Math.random() * 0.6 - 0.3);
             
             items.push({
                 x: randX,
@@ -686,21 +674,21 @@
                 
                 if(item.vx !== 0) {
                     item.x += item.vx;
-                    item.vx *= 0.98;
+                    item.vx *= 0.96;
                     if(Math.abs(item.vx) < 0.1) item.vx = 0;
                 }
                 
                 item.y += item.speed;
                 
-                const collides = (item.x < labubaX + LABUBA_WIDTH &&
+                const collides = (item.x < labubaX + LABUBA_SIZE &&
                                    item.x + item.w > labubaX &&
-                                   item.y < labubaY + LABUBA_HEIGHT &&
+                                   item.y < labubaY + LABUBA_SIZE &&
                                    item.y + item.h > labubaY);
                 
                 if(collides) {
                     if(frozenActive) {
-                        const direction = (item.x + item.w/2) - (labubaX + LABUBA_WIDTH/2);
-                        item.vx = Math.sign(direction) * 4.5;
+                        const direction = (item.x + item.w/2) - (labubaX + LABUBA_SIZE/2);
+                        item.vx = Math.sign(direction) * 4;
                         item.y = labubaY - item.h - 2;
                         continue;
                     } else {
@@ -710,7 +698,7 @@
                             if(flyActive) {
                                 flyActive = false;
                                 flyRemaining = 0;
-                                labubaY = GROUND_Y - LABUBA_HEIGHT + 10;
+                                labubaY = GROUND_Y - LABUBA_SIZE + 8;
                                 recalculateMultipliers();
                             }
                         }
@@ -720,7 +708,7 @@
                             if(flyActive) {
                                 flyActive = false;
                                 flyRemaining = 0;
-                                labubaY = GROUND_Y - LABUBA_HEIGHT + 10;
+                                labubaY = GROUND_Y - LABUBA_SIZE + 8;
                                 recalculateMultipliers();
                             }
                         }
@@ -735,7 +723,7 @@
                     }
                 }
                 
-                if(item.y + item.h > GROUND_Y + 50 || item.x + item.w < 0 || item.x > canvas.width) {
+                if(item.y + item.h > GROUND_Y + 50 || item.x + item.w < 0 || item.x > CANVAS_W) {
                     items.splice(i,1);
                     i--;
                 }
@@ -746,7 +734,7 @@
             if(!gameActive) return;
             frameCounter++;
             let currentRate = baseSpawnRate;
-            if(speedStacks > 0) currentRate = Math.max(35, baseSpawnRate - 12);
+            if(speedStacks > 0) currentRate = Math.max(32, baseSpawnRate - 12);
             
             if(frameCounter - lastSpawnFrame >= currentRate) {
                 lastSpawnFrame = frameCounter;
@@ -778,8 +766,8 @@
             gameActive = true;
             score = 0;
             items = [];
-            labubaX = canvas.width/2 - LABUBA_WIDTH/2;
-            labubaY = GROUND_Y - LABUBA_HEIGHT + 10;
+            labubaX = CANVAS_W/2 - LABUBA_SIZE/2;
+            labubaY = GROUND_Y - LABUBA_SIZE + 8;
             targetLabubaX = labubaX;
             targetLabubaY = labubaY;
             frameCounter = 0;
@@ -809,9 +797,9 @@
         function handleCanvasResize() {
             const containerRect = gameContainer.getBoundingClientRect();
             const maxHeight = window.innerHeight * 0.92;
-            const scale = Math.min(containerRect.width / 450, maxHeight / 700);
-            canvas.style.width = `${450 * scale}px`;
-            canvas.style.height = `${700 * scale}px`;
+            const scale = Math.min(containerRect.width / CANVAS_W, maxHeight / CANVAS_H);
+            canvas.style.width = `${CANVAS_W * scale}px`;
+            canvas.style.height = `${CANVAS_H * scale}px`;
         }
         window.addEventListener('resize', handleCanvasResize);
         handleCanvasResize();
@@ -836,15 +824,15 @@
             return labubaNormal;
         }
         
-        function drawLabuba(x, y, w, h) {
+        function drawLabuba(x, y, size) {
             const currentImg = getCurrentLabubaImage();
             
             if (currentImg && currentImg.complete && currentImg.naturalWidth > 0) {
-                ctx.drawImage(currentImg, x, y, w, h);
+                ctx.drawImage(currentImg, x, y, size, size);
                 if(flyActive && !frozenActive) {
                     ctx.fillStyle = "#E84A5F";
-                    ctx.font = `24px "Apple Color Emoji"`;
-                    ctx.fillText("🚀", x + w - 12, y - 8);
+                    ctx.font = `22px "Apple Color Emoji"`;
+                    ctx.fillText("🚀", x + size - 12, y - 6);
                 }
                 return;
             }
@@ -853,43 +841,43 @@
             if (frozenActive) {
                 ctx.fillStyle = "#4A90D9";
                 ctx.beginPath();
-                ctx.ellipse(x+w/2, y+h/2, w*0.35, h*0.4, 0, 0, Math.PI*2);
+                ctx.arc(x + size/2, y + size/2, size/2.5, 0, Math.PI*2);
                 ctx.fill();
                 ctx.fillStyle = "#ffffff";
-                ctx.font = `36px "Apple Color Emoji"`;
-                ctx.fillText("❄️", x + w/2 - 18, y + h/2 + 12);
+                ctx.font = `${size/2}px "Apple Color Emoji"`;
+                ctx.fillText("❄️", x + size/2 - size/4, y + size/2 + size/6);
             } else if (slowStacks > 0) {
                 ctx.fillStyle = "#8B6914";
                 ctx.beginPath();
-                ctx.ellipse(x+w/2, y+h/2, w*0.35, h*0.4, 0, 0, Math.PI*2);
+                ctx.arc(x + size/2, y + size/2, size/2.5, 0, Math.PI*2);
                 ctx.fill();
                 ctx.fillStyle = "#ffffff";
-                ctx.font = `32px "Apple Color Emoji"`;
-                ctx.fillText("💩", x + w/2 - 16, y + h/2 + 12);
+                ctx.font = `${size/2}px "Apple Color Emoji"`;
+                ctx.fillText("💩", x + size/2 - size/4, y + size/2 + size/6);
             } else {
                 ctx.fillStyle = "#b980f0";
                 ctx.beginPath();
-                ctx.ellipse(x+w/2, y+h/2, w*0.35, h*0.4, 0, 0, Math.PI*2);
+                ctx.arc(x + size/2, y + size/2, size/2.5, 0, Math.PI*2);
                 ctx.fill();
                 ctx.fillStyle = "#2f1b47";
                 ctx.beginPath();
-                ctx.arc(x+w*0.35, y+h*0.4, 5, 0, Math.PI*2);
+                ctx.arc(x + size*0.35, y + size*0.4, size/10, 0, Math.PI*2);
                 ctx.fill();
                 ctx.beginPath();
-                ctx.arc(x+w*0.65, y+h*0.4, 5, 0, Math.PI*2);
+                ctx.arc(x + size*0.65, y + size*0.4, size/10, 0, Math.PI*2);
                 ctx.fill();
                 ctx.fillStyle = "white";
                 ctx.beginPath();
-                ctx.arc(x+w*0.33, y+h*0.38, 2, 0, Math.PI*2);
+                ctx.arc(x + size*0.33, y + size*0.38, size/20, 0, Math.PI*2);
                 ctx.fill();
                 ctx.beginPath();
-                ctx.arc(x+w*0.63, y+h*0.38, 2, 0, Math.PI*2);
+                ctx.arc(x + size*0.63, y + size*0.38, size/20, 0, Math.PI*2);
                 ctx.fill();
             }
             if(flyActive && !frozenActive) {
                 ctx.fillStyle = "#E84A5F";
-                ctx.font = `24px "Apple Color Emoji"`;
-                ctx.fillText("🚀", x + w - 12, y - 8);
+                ctx.font = `22px "Apple Color Emoji"`;
+                ctx.fillText("🚀", x + size - 12, y - 6);
             }
             ctx.restore();
         }
@@ -898,23 +886,22 @@
             ctx.font = `${ITEM_SIZE}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
-            ctx.shadowBlur = 0;
             ctx.fillText(item.type, item.x + ITEM_SIZE/2, item.y + ITEM_SIZE/2);
         }
         
         let stars = [];
-        for(let i = 0; i < 120; i++) {
+        for(let i = 0; i < 80; i++) {
             stars.push({
-                x: Math.random() * canvas.width,
-                y: Math.random() * canvas.height,
+                x: Math.random() * CANVAS_W,
+                y: Math.random() * CANVAS_H,
                 size: Math.random() * 1.5 + 0.5,
-                alpha: Math.random() * 0.4 + 0.2
+                alpha: Math.random() * 0.5 + 0.2
             });
         }
         
         function drawSpaceBackground() {
             ctx.fillStyle = "#0a0a1a";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
             for(let s of stars) {
                 ctx.fillStyle = `rgba(255, 238, 204, ${s.alpha})`;
                 ctx.beginPath();
@@ -933,15 +920,15 @@
         function drawMoonIsland() {
             ctx.beginPath();
             ctx.moveTo(-5, GROUND_Y + 8);
-            ctx.quadraticCurveTo(canvas.width / 2, GROUND_Y - 20, canvas.width + 5, GROUND_Y + 8);
-            ctx.lineTo(canvas.width + 5, GROUND_Y + 35);
-            ctx.quadraticCurveTo(canvas.width / 2, GROUND_Y + 45, -5, GROUND_Y + 35);
+            ctx.quadraticCurveTo(CANVAS_W / 2, GROUND_Y - 20, CANVAS_W + 5, GROUND_Y + 8);
+            ctx.lineTo(CANVAS_W + 5, GROUND_Y + 35);
+            ctx.quadraticCurveTo(CANVAS_W / 2, GROUND_Y + 45, -5, GROUND_Y + 35);
             ctx.fillStyle = "#8B8B9A";
             ctx.fill();
             
             ctx.beginPath();
             ctx.moveTo(-3, GROUND_Y + 6);
-            ctx.quadraticCurveTo(canvas.width / 2, GROUND_Y - 22, canvas.width + 3, GROUND_Y + 6);
+            ctx.quadraticCurveTo(CANVAS_W / 2, GROUND_Y - 22, CANVAS_W + 3, GROUND_Y + 6);
             ctx.fillStyle = "#A0A0B0";
             ctx.fill();
             
@@ -950,56 +937,43 @@
             ctx.ellipse(70, GROUND_Y + 12, 14, 7, 0, 0, Math.PI*2);
             ctx.fill();
             ctx.beginPath();
-            ctx.ellipse(canvas.width - 70, GROUND_Y + 14, 16, 8, 0, 0, Math.PI*2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.ellipse(140, GROUND_Y + 7, 10, 5, 0, 0, Math.PI*2);
+            ctx.ellipse(CANVAS_W - 70, GROUND_Y + 14, 16, 8, 0, 0, Math.PI*2);
             ctx.fill();
             
             ctx.font = `22px "Apple Color Emoji"`;
             ctx.fillStyle = "#C0C0D0";
             ctx.fillText("🛸", 12, GROUND_Y - 5);
-            ctx.fillText("🛸", canvas.width - 38, GROUND_Y - 8);
+            ctx.fillText("🛸", CANVAS_W - 38, GROUND_Y - 8);
             ctx.fillText("🛰️", 6, GROUND_Y + 8);
-            ctx.fillText("🛰️", canvas.width - 30, GROUND_Y + 6);
+            ctx.fillText("🛰️", CANVAS_W - 30, GROUND_Y + 6);
         }
         
         function drawNormalIsland(state) {
-            let groundColor1, groundColor2, strokeColor;
+            let groundColor1, groundColor2;
             if(state === 'frozen') {
                 groundColor1 = "#B0E0FF";
                 groundColor2 = "#D0F0FF";
-                strokeColor = "#80C0E0";
             } else if(state === 'poison') {
                 groundColor1 = "#8B7D6B";
                 groundColor2 = "#9B8D7B";
-                strokeColor = "#6B5D4B";
             } else {
                 groundColor1 = "#82b74e";
                 groundColor2 = "#8fc95c";
-                strokeColor = "#6a9c3e";
             }
             
             ctx.beginPath();
             ctx.moveTo(-5, GROUND_Y + 8);
-            ctx.quadraticCurveTo(canvas.width / 2, GROUND_Y - 20, canvas.width + 5, GROUND_Y + 8);
-            ctx.lineTo(canvas.width + 5, GROUND_Y + 35);
-            ctx.quadraticCurveTo(canvas.width / 2, GROUND_Y + 45, -5, GROUND_Y + 35);
+            ctx.quadraticCurveTo(CANVAS_W / 2, GROUND_Y - 20, CANVAS_W + 5, GROUND_Y + 8);
+            ctx.lineTo(CANVAS_W + 5, GROUND_Y + 35);
+            ctx.quadraticCurveTo(CANVAS_W / 2, GROUND_Y + 45, -5, GROUND_Y + 35);
             ctx.fillStyle = groundColor1;
             ctx.fill();
             
             ctx.beginPath();
             ctx.moveTo(-3, GROUND_Y + 6);
-            ctx.quadraticCurveTo(canvas.width / 2, GROUND_Y - 22, canvas.width + 3, GROUND_Y + 6);
+            ctx.quadraticCurveTo(CANVAS_W / 2, GROUND_Y - 22, CANVAS_W + 3, GROUND_Y + 6);
             ctx.fillStyle = groundColor2;
             ctx.fill();
-            
-            ctx.beginPath();
-            ctx.moveTo(-3, GROUND_Y + 6);
-            ctx.quadraticCurveTo(canvas.width / 2, GROUND_Y - 22, canvas.width + 3, GROUND_Y + 6);
-            ctx.strokeStyle = strokeColor;
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
         }
         
         function drawGrass(state) {
@@ -1007,13 +981,11 @@
                 const snowmen = [
                     { x: 30, y: GROUND_Y + 4 },
                     { x: 70, y: GROUND_Y },
-                    { x: canvas.width - 35, y: GROUND_Y + 2 },
-                    { x: canvas.width - 75, y: GROUND_Y - 2 },
-                    { x: 100, y: GROUND_Y + 6 }
+                    { x: CANVAS_W - 35, y: GROUND_Y + 2 },
+                    { x: CANVAS_W - 75, y: GROUND_Y - 2 }
                 ];
                 for(let s of snowmen) {
                     ctx.font = `24px "Apple Color Emoji"`;
-                    ctx.textAlign = "center";
                     ctx.fillText("⛄", s.x, s.y);
                 }
             } 
@@ -1021,8 +993,8 @@
                 const poisonBushes = [
                     { x: 20, y: GROUND_Y + 4 },
                     { x: 50, y: GROUND_Y + 2 },
-                    { x: canvas.width - 32, y: GROUND_Y + 3 },
-                    { x: canvas.width - 68, y: GROUND_Y }
+                    { x: CANVAS_W - 32, y: GROUND_Y + 3 },
+                    { x: CANVAS_W - 68, y: GROUND_Y }
                 ];
                 for(let bush of poisonBushes) {
                     ctx.font = `24px "Apple Color Emoji"`;
@@ -1033,10 +1005,8 @@
                 const bushes = [
                     { x: 18, y: GROUND_Y + 8, size: 12 },
                     { x: 45, y: GROUND_Y + 10, size: 10 },
-                    { x: 70, y: GROUND_Y + 6, size: 14 },
-                    { x: canvas.width - 25, y: GROUND_Y + 8, size: 13 },
-                    { x: canvas.width - 55, y: GROUND_Y + 10, size: 11 },
-                    { x: canvas.width - 80, y: GROUND_Y + 6, size: 10 }
+                    { x: CANVAS_W - 25, y: GROUND_Y + 8, size: 13 },
+                    { x: CANVAS_W - 55, y: GROUND_Y + 10, size: 11 }
                 ];
                 for(let bush of bushes) {
                     const x = bush.x;
@@ -1065,7 +1035,7 @@
                 drawSpaceBackground();
                 drawMoonIsland();
             } else {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
                 drawNormalIsland(state);
                 drawGrass(state);
             }
@@ -1079,7 +1049,7 @@
                 handleSpawning();
             }
             drawIsland();
-            drawLabuba(labubaX, labubaY, LABUBA_WIDTH, LABUBA_HEIGHT);
+            drawLabuba(labubaX, labubaY, LABUBA_SIZE);
             for(let item of items) drawItem(item);
             requestAnimationFrame(gameLoop);
         }
